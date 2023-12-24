@@ -1,5 +1,5 @@
 CXX=g++
-CXXFLAGS=-I.. -std=c++11
+CXXFLAGS=-I.. -std=c++17
 
 # Base64 library
 BASE64_SRC=base64.cpp
@@ -9,21 +9,24 @@ BASE64_OBJ=$(BASE64_SRC:.cpp=.o)
 SERVER_SRC=server.cpp
 SERVER_OBJ=$(SERVER_SRC:.cpp=.o) $(BASE64_OBJ)
 SERVER_EXEC=server
-SERVER_LIBS=-lserver
+SERVER_LIBS=-lserver -lclient
 
 # For client
 CLIENT_SRC=sectrans.cpp
 CLIENT_OBJ=$(CLIENT_SRC:.cpp=.o) $(BASE64_OBJ)
 CLIENT_EXEC=sectrans
-CLIENT_LIBS=-lclient
+CLIENT_LIBS=-lclient -lserver
+
+# Local directory for libraries
+LIB_DIR=.
 
 all: $(SERVER_EXEC) $(CLIENT_EXEC)
 
 $(SERVER_EXEC): $(SERVER_OBJ)
-	$(CXX) -o $@ $^ $(CXXFLAGS) $(SERVER_LIBS)
+	$(CXX) -o $@ $^ $(CXXFLAGS) -L$(LIB_DIR) $(SERVER_LIBS) -Wl,-rpath,$(LIB_DIR)
 
 $(CLIENT_EXEC): $(CLIENT_OBJ)
-	$(CXX) -o $@ $^ $(CXXFLAGS) $(CLIENT_LIBS)
+	$(CXX) -o $@ $^ $(CXXFLAGS) -L$(LIB_DIR) $(CLIENT_LIBS) -Wl,-rpath,$(LIB_DIR)
 
 %.o: %.cpp
 	$(CXX) -c -o $@ $< $(CXXFLAGS)
