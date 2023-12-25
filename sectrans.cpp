@@ -2,12 +2,15 @@
 #include <fstream>
 #include <vector>
 #include <cstring>
+#include <filesystem>
 #include "client.h"
 #include "server.h"
 #include "base64.h"
 
 using namespace std;
+namespace fs = std::filesystem;
 const int SERVER_PORT = 50000;
+const int CLIENT_PORT = 1235;
 
 void uploadFile(const string& filename) 
 {
@@ -58,9 +61,8 @@ void listFiles(){
     delete[] listCommand;
 
     // send client port
-    int port = 1235;
-    startserver(port);
-    sndmsg(stringToMutableCString(to_string(port)), SERVER_PORT);
+    startserver(CLIENT_PORT);
+    sndmsg(stringToMutableCString(to_string(CLIENT_PORT)), SERVER_PORT);
 
     // receive the files
     getmsg(buffer);
@@ -68,6 +70,44 @@ void listFiles(){
 
     // print files on client console
     cout << buffer << endl;
+}
+
+void downloadFile(string filename)
+{
+    // Send the download command first
+    char* downCommand = stringToMutableCString("file download");
+    sndmsg(downCommand, SERVER_PORT);
+
+    // send client port
+    startserver(CLIENT_PORT);
+    sndmsg(stringToMutableCString(to_string(CLIENT_PORT)), SERVER_PORT);
+    
+    // Send the filename
+    char* mutableFilename = stringToMutableCString(filename);
+    sndmsg(mutableFilename, SERVER_PORT);
+    delete[] mutableFilename;
+
+    ///
+    char buffer[1024];
+    ofstream fout(filename, ios::binary);
+
+    // Keep receiving and writing data until the end signal is received
+    while (true) {
+        getmsg(buffer);
+
+        // Check for signal indicating the end of data transmission
+        if (strcmp(buffer, "END_OF_FILE") == 0) {
+            break;
+        }
+
+        string encodedData(buffer);
+
+        // Decode the Base64 data and write to the file
+        string decodedData = base64_decode(encodedData);
+        fout.write(decodedData.c_str(), decodedData.size());
+    }
+
+    fout.close();
 }
 
 int main(int argc, char* argv[]) {
@@ -81,6 +121,9 @@ int main(int argc, char* argv[]) {
         uploadFile(filename);
     } else if (command == "-list"){
         listFiles();
+    } else if (command == "-down"){
+        string filename = argv[2];
+        downloadFile(filename);
     }
 
     return 0;
