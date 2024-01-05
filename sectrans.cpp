@@ -1,112 +1,58 @@
 #include <iostream>
 #include <fstream>
-#include <vector>
 #include <cstring>
 #include <filesystem>
+#include "base64.h"
 #include "client.h"
 #include "server.h"
-#include "base64.h"
+#include "encryption.h"
+#include "secure_send_receive.h"
 
 using namespace std;
 namespace fs = std::filesystem;
 const int SERVER_PORT = 50000;
 const int CLIENT_PORT = 1235;
 
-void uploadFile(const string& filename) 
-{
+// Assuming global variables for keys
+std::string publicKey, privateKey, serverPubKey;
+
+void uploadFile(const string& filename) {
     // Send the 'up' command first
-    char* upCommand = stringToMutableCString("file upload");
-    sndmsg(upCommand, SERVER_PORT);
+    sendDataEncrypted("upload", serverPubKey, SERVER_PORT);
 
     // Open the file for reading in binary mode
     ifstream fin(filename, ios::binary);
-
-    // Read the file into a string
     string fileData((istreambuf_iterator<char>(fin)), istreambuf_iterator<char>());
     fin.close();
 
-    // Encode the file data to Base64
-    string encodedData = base64_encode(fileData);
+    // Encode and encrypt the file data
+    sendDataEncrypted(fileData, serverPubKey, SERVER_PORT);
 
     // Send the filename
-    char* mutableFilename = stringToMutableCString(filename);
-    sndmsg(mutableFilename, SERVER_PORT);
-    delete[] mutableFilename; // Free the allocated memory for filename
-
-    // Send the encoded data in chunks
-    const size_t chunkSize = 1024; // Define the maximum chunk size
-    for (size_t i = 0; i < encodedData.size(); i += chunkSize) {
-        string chunk = encodedData.substr(i, min(chunkSize, encodedData.size() - i));
-        char* mutableChunk = stringToMutableCString(chunk);
-        sndmsg(mutableChunk, SERVER_PORT);
-        delete[] mutableChunk; // Free the allocated memory for each chunk
-    }
-
-    // Send end of file
-    char* endFile = stringToMutableCString("END_OF_FILE");
-    sndmsg(endFile, SERVER_PORT);
-    cout<< filename << " " << upCommand << " " << endFile << endl;
-
-    // Free the allocated memory
-    delete[] endFile;
-    delete[] upCommand;
+    sendDataEncrypted(filename, serverPubKey, SERVER_PORT);
 }
 
-void listFiles(){
-    char buffer[1024];
-
+void listFiles() {
     // Send the 'list' command first
-    char* listCommand = stringToMutableCString("list files");
-    sndmsg(listCommand, SERVER_PORT);
-    delete[] listCommand;
+    sendDataEncrypted("list", serverPubKey, SERVER_PORT);
 
-    // send client port
-    startserver(CLIENT_PORT);
-    sndmsg(stringToMutableCString(to_string(CLIENT_PORT)), SERVER_PORT);
+    // Receive and decrypt the file list
+    string filesList = receiveDataDecrypted(privateKey);
 
-    // receive the files
-    getmsg(buffer);
-    stopserver();
-
-    // print files on client console
-    cout << buffer << endl;
+    // Print files on client console
+    std::cout << filesList << std::endl;
 }
 
-void downloadFile(string filename)
-{
+void downloadFile(string filename) {
     // Send the download command first
-    char* downCommand = stringToMutableCString("file download");
-    sndmsg(downCommand, SERVER_PORT);
+    sendDataEncrypted("download", serverPubKey, SERVER_PORT);
 
-    // send client port
-    startserver(CLIENT_PORT);
-    sndmsg(stringToMutableCString(to_string(CLIENT_PORT)), SERVER_PORT);
-    
     // Send the filename
-    char* mutableFilename = stringToMutableCString(filename);
-    sndmsg(mutableFilename, SERVER_PORT);
-    delete[] mutableFilename;
+    sendDataEncrypted(filename, serverPubKey, SERVER_PORT);
 
-    ///
-    char buffer[1024];
+    string fileData = receiveDataDecrypted(privateKey);
     ofstream fout(filename, ios::binary);
-
-    // Keep receiving and writing data until the end signal is received
-    while (true) {
-        getmsg(buffer);
-
-        // Check for signal indicating the end of data transmission
-        if (strcmp(buffer, "END_OF_FILE") == 0) {
-            break;
-        }
-
-        string encodedData(buffer);
-
-        // Decode the Base64 data and write to the file
-        string decodedData = base64_decode(encodedData);
-        fout.write(decodedData.c_str(), decodedData.size());
-    }
-
+    fout.write(fileData.c_str(), fileData.size());
     fout.close();
 }
 
@@ -115,16 +61,33 @@ int main(int argc, char* argv[]) {
         cerr << "Usage: " << argv[0] << " <command> [arguments]\n";
         return 1;
     }
+    // start client server
+    startserver(CLIENT_PORT);
+
+    
+    // Generate or load the keys
+    generateRSAKeyPair(publicKey, privateKey);
+    
+    // send the client public key
+    sendData(publicKey, SERVER_PORT);
+    
+    // send client port to the server
+    sendData(std::to_string(CLIENT_PORT), SERVER_PORT);
+
+    // receive server public key
+    serverPubKey = receiveData();
+
     string command = argv[1];
     if (command == "-up") {
         string filename = argv[2];
         uploadFile(filename);
-    } else if (command == "-list"){
+    } else if (command == "-list") {
         listFiles();
-    } else if (command == "-down"){
+    } else if (command == "-down") {
         string filename = argv[2];
         downloadFile(filename);
     }
+    stopserver();
 
     return 0;
 }

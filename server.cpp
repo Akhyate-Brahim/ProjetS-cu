@@ -5,112 +5,73 @@
 #include "server.h"
 #include "client.h"
 #include "base64.h"
+#include "encryption.h"
+#include "secure_send_receive.h"
 
-using namespace std;
 namespace fs = std::filesystem;
 const int SERVER_PORT = 50000;
-const string FILE_STORAGE = "./files/";
+const std::string FILE_STORAGE = "./files/";
 
-void processUploadCommand() 
-{
-    char buffer[1024];
+// Global variables for keys
+std::string clientPubKey, publicKey, privateKey;
 
-    // Receive the file name
-    getmsg(buffer);
-    string filename = FILE_STORAGE + string(buffer);
+void processUploadCommand() {
+    std::string filename = receiveDataDecrypted(privateKey);  // Receive filename
+    filename = FILE_STORAGE + filename;
     fs::path dirPath(FILE_STORAGE);
-    ofstream fout(filename, ios::binary);
+    std::ofstream fout(filename, std::ios::binary);
 
-    // Keep receiving and writing data until the end signal is received
-    while (true) {
-        getmsg(buffer);
-
-        // Check for signal indicating the end of data transmission
-        if (strcmp(buffer, "END_OF_FILE") == 0) {
-            break;
-        }
-
-        string encodedData(buffer);
-
-        // Decode the Base64 data and write to the file
-        string decodedData = base64_decode(encodedData);
-        fout.write(decodedData.c_str(), decodedData.size());
-    }
-
+    std::string decryptedData = receiveDataDecrypted(privateKey); // Receive file data
+    fout.write(decryptedData.c_str(), decryptedData.size());
     fout.close();
 }
 
-void processListCommand(int portNumber)
-{
-    stringstream buffer;
+void processListCommand(int portNumber) {
+    std::stringstream fileList;
     for (const auto &entry : fs::directory_iterator(FILE_STORAGE)) {
-        buffer << entry.path().filename().string() << "\n";
+        fileList << entry.path().filename().string() << "\n";
     }
-    sndmsg(stringToMutableCString(buffer.str()), portNumber);
-    char* endFile = stringToMutableCString("END_OF_LIST");
-    sndmsg(endFile, portNumber);
+    sendDataEncrypted(fileList.str(), clientPubKey, portNumber); // Send file list
 }
 
-void processDownloadCommand(const string& requestedFilename, int portNumber) 
-{
+void processDownloadCommand(const std::string& requestedFilename, int portNumber) {
     fs::path filePath = fs::path(FILE_STORAGE) / requestedFilename;
 
-    // Check if the file exists and is not a directory
     if (fs::exists(filePath) && fs::is_regular_file(filePath)) {
-        // Open the file for reading in binary mode
-        ifstream fin(filePath, ios::binary);
-
-        // Read and send the file data
-        string fileData((istreambuf_iterator<char>(fin)), istreambuf_iterator<char>());
+        std::ifstream fin(filePath, std::ios::binary);
+        std::string fileData((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
         fin.close();
-        string encodedData = base64_encode(fileData);
 
-        // Send the encoded data in chunks
-        const size_t chunkSize = 1024; // Define the maximum chunk size
-        for (size_t i = 0; i < encodedData.size(); i += chunkSize) {
-            string chunk = encodedData.substr(i, min(chunkSize, encodedData.size() - i));
-            char* mutableChunk = stringToMutableCString(chunk);
-            sndmsg(mutableChunk, portNumber);
-            delete[] mutableChunk;
-        }
-
-        // Send end of file signal
-        char* endFile = stringToMutableCString("END_OF_FILE");
-        sndmsg(endFile, portNumber);
-        delete[] endFile;
+        sendDataEncrypted(fileData, clientPubKey, portNumber); // Send file data
     } else {
-        // Handle the case where the file is not found
-        char* fileNotFoundMsg = stringToMutableCString("FILE_NOT_FOUND");
-        sndmsg(fileNotFoundMsg, portNumber);
-        delete[] fileNotFoundMsg;
+        sendDataEncrypted("FILE_NOT_FOUND", clientPubKey, portNumber); // Send error message
     }
 }
 
-int main() 
-{
+int main() {
     startserver(SERVER_PORT);
+    generateRSAKeyPair(publicKey, privateKey); // Generate or load the keys
 
     while (true) {
-        char commandBuffer[1024];
-        getmsg(commandBuffer);
-        string command(commandBuffer);
-        cout << command;
-        if (command == "file upload") {
+        // receive client publicKey
+        clientPubKey = receiveData();
+        
+        // receive client port
+        int clientPort = std::stoi(receiveData());
+
+        // sending server publicKey
+        sendData(publicKey, clientPort);
+
+        // receive the command
+        std::string command = receiveDataDecrypted(privateKey); // Receive command
+
+        if (command.find("upload") != std::string::npos) {
             processUploadCommand();
-        }
-        else if (command == "list files"){
-            char port[1024];
-            getmsg(port);
-            int portNumber = atoi(port);
-            processListCommand(portNumber);
-        } 
-        else if (command == "file download"){
-            char buffer[1024];
-            getmsg(buffer);
-            int portNumber = atoi(buffer);
-            getmsg(buffer);
-            string filename = buffer;
-            processDownloadCommand(filename, portNumber);
+        } else if (command.find("list") != std::string::npos) {
+            processListCommand(clientPort);
+        } else if (command.find("download") != std::string::npos) {
+            std::string filename = receiveDataDecrypted(privateKey); // Receive filename
+            processDownloadCommand(filename, clientPort);
         }
     }
 
