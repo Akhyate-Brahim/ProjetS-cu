@@ -13,44 +13,40 @@ namespace fs = std::filesystem;
 const int SERVER_PORT = 50000;
 const int CLIENT_PORT = 1235;
 
-// Assuming global variables for keys
-std::string publicKey, privateKey, serverPubKey;
 
-void uploadFile(const string& filename) {
+void uploadFile(const string& aesKey, const string& filename) {
     // Send the 'up' command first
-    sendDataEncrypted("upload", serverPubKey, SERVER_PORT);
+    sendDataAESEncrypted("upload", aesKey,SERVER_PORT);
 
     // Open the file for reading in binary mode
     ifstream fin(filename, ios::binary);
     string fileData((istreambuf_iterator<char>(fin)), istreambuf_iterator<char>());
     fin.close();
-
-    // Encode and encrypt the file data
-    sendDataEncrypted(fileData, serverPubKey, SERVER_PORT);
-
     // Send the filename
-    sendDataEncrypted(filename, serverPubKey, SERVER_PORT);
+    sendDataAESEncrypted(filename, aesKey,SERVER_PORT);
+    // Encode and encrypt the file data
+    sendDataAESEncrypted(fileData, aesKey,SERVER_PORT);
 }
 
-void listFiles() {
+void listFiles(const string& aesKey) {
     // Send the 'list' command first
-    sendDataEncrypted("list", serverPubKey, SERVER_PORT);
+    sendDataAESEncrypted("list", aesKey, SERVER_PORT);
 
     // Receive and decrypt the file list
-    string filesList = receiveDataDecrypted(privateKey);
+    string filesList = receiveDataAESDecrypted(aesKey);
 
     // Print files on client console
     std::cout << filesList << std::endl;
 }
 
-void downloadFile(string filename) {
+void downloadFile(const string& aesKey, const string& filename) {
     // Send the download command first
-    sendDataEncrypted("download", serverPubKey, SERVER_PORT);
+    sendDataAESEncrypted("download", aesKey, SERVER_PORT);
 
     // Send the filename
-    sendDataEncrypted(filename, serverPubKey, SERVER_PORT);
+    sendDataAESEncrypted(filename, aesKey, SERVER_PORT);
 
-    string fileData = receiveDataDecrypted(privateKey);
+    string fileData = receiveDataAESDecrypted(aesKey);
     ofstream fout(filename, ios::binary);
     fout.write(fileData.c_str(), fileData.size());
     fout.close();
@@ -61,10 +57,10 @@ int main(int argc, char* argv[]) {
         cerr << "Usage: " << argv[0] << " <command> [arguments]\n";
         return 1;
     }
+    std::string publicKey, privateKey, serverPubKey;
     // start client server
     startserver(CLIENT_PORT);
 
-    
     // Generate or load the keys
     generateRSAKeyPair(publicKey, privateKey);
     
@@ -77,15 +73,21 @@ int main(int argc, char* argv[]) {
     // receive server public key
     serverPubKey = receiveData();
 
+    // send aes key
+    std::string aesKey;
+    generateParameter(aesKey, 32);
+    sendDataRSAEncrypted(aesKey, serverPubKey, SERVER_PORT);
+
     string command = argv[1];
+
     if (command == "-up") {
         string filename = argv[2];
-        uploadFile(filename);
+        uploadFile(aesKey,filename);
     } else if (command == "-list") {
-        listFiles();
+        listFiles(aesKey);
     } else if (command == "-down") {
         string filename = argv[2];
-        downloadFile(filename);
+        downloadFile(aesKey, filename);
     }
     stopserver();
 

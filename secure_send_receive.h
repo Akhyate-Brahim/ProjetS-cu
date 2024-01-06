@@ -2,11 +2,19 @@
 #define SECURE_SEND_RECEIVE_H
 
 #include <string>
+#include <vector>
+#include <iomanip>
+#include "base64.h"
+#include "server.h"
+#include "client.h"
+#include "encryption.h"
 
-void sendDataEncrypted(const std::string& data, const std::string& publicKey, int portNumber);
-std::string receiveDataDecrypted(const std::string& privateKey);
 void sendData(const std::string& data, int portNumber);
 std::string receiveData();
+void sendDataRSAEncrypted(const std::string& data, const std::string& publicKey, int portNumber);
+std::string receiveDataRSADecrypted(const std::string& privateKey);
+void sendDataAESEncrypted(const std::string& data, const std::string& key, int portNumber);
+std::string receiveDataAESDecrypted(const std::string& key);
 
 
 #endif

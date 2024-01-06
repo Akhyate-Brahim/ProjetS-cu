@@ -1,10 +1,7 @@
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/err.h>
-#include <string>
-#include <iostream>
+#include "encryption.h"
 
-void generateRSAKeyPair(std::string &publicKey, std::string &privateKey, int keyLength = 2048) {
+ 
+void generateRSAKeyPair(std::string &publicKey, std::string &privateKey, int keyLength) {
     // Generating the key pair
     RSA *keypair = RSA_new();
     BIGNUM *bne = BN_new();
@@ -75,13 +72,130 @@ std::string decryptWithPrivateKey(const std::string& encryptedData, const std::s
     BIO *keybio = BIO_new_mem_buf((void*)privateKey.c_str(), -1);
     PEM_read_bio_RSAPrivateKey(keybio, &rsa, NULL, NULL);
 
-    std::string decryptedData;
-    decryptedData.resize(RSA_size(rsa));
+    // Create a buffer for the decrypted data
+    std::vector<unsigned char> buffer(RSA_size(rsa));
 
-    RSA_private_decrypt(encryptedData.size(), (unsigned char*)encryptedData.c_str(), (unsigned char*)&decryptedData[0], rsa, RSA_PKCS1_PADDING);
+    // Perform the decryption
+    int decryptedSize = RSA_private_decrypt(encryptedData.size(), 
+                                            reinterpret_cast<const unsigned char*>(encryptedData.c_str()), 
+                                            buffer.data(), rsa, RSA_PKCS1_PADDING);
+    if (decryptedSize == -1) {
+        // Handle decryption error
+        RSA_free(rsa);
+        BIO_free(keybio);
+        throw std::runtime_error("RSA decryption failed.");
+    }
+
+    // Create a string from the decrypted data buffer
+    std::string decryptedData(buffer.begin(), buffer.begin() + decryptedSize);
 
     RSA_free(rsa);
     BIO_free(keybio);
 
     return decryptedData;
+}
+
+
+void generateParameter(std::string& key, int size) {
+    unsigned char key_bytes[size];
+    RAND_bytes(key_bytes, sizeof(key_bytes));;
+    key = std::string((char *)key_bytes, sizeof(key_bytes));
+}
+
+
+void handleErrors() {
+    throw std::runtime_error("OpenSSL error occurred.");
+}
+
+int gcm_encrypt(const std::vector<unsigned char>& plaintext,
+                const std::vector<unsigned char>& aad,
+                const std::vector<unsigned char>& key,
+                const std::vector<unsigned char>& iv,
+                std::vector<unsigned char>& ciphertext,
+                std::vector<unsigned char>& tag) {
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    int ciphertext_len;
+
+    if(!(ctx = EVP_CIPHER_CTX_new()))
+        handleErrors();
+
+    if(1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL))
+        handleErrors();
+
+    if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, iv.size(), NULL))
+        handleErrors();
+
+    if(1 != EVP_EncryptInit_ex(ctx, NULL, NULL, key.data(), iv.data()))
+        handleErrors();
+
+    if(!aad.empty()) {
+        if(1 != EVP_EncryptUpdate(ctx, NULL, &len, aad.data(), aad.size()))
+            handleErrors();
+    }
+
+    ciphertext.resize(plaintext.size());
+    if(1 != EVP_EncryptUpdate(ctx, ciphertext.data(), &len, plaintext.data(), plaintext.size()))
+        handleErrors();
+    ciphertext_len = len;
+
+    if(1 != EVP_EncryptFinal_ex(ctx, ciphertext.data() + len, &len))
+        handleErrors();
+    ciphertext_len += len;
+
+    tag.resize(16); // GCM tag is typically 16 bytes
+    if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, tag.data()))
+        handleErrors();
+
+    EVP_CIPHER_CTX_free(ctx);
+    return ciphertext_len;
+}
+
+int gcm_decrypt(const std::vector<unsigned char>& ciphertext,
+                const std::vector<unsigned char>& aad,
+                const std::vector<unsigned char>& tag,
+                const std::vector<unsigned char>& key,
+                const std::vector<unsigned char>& iv,
+                std::vector<unsigned char>& plaintext) {
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    int plaintext_len;
+    int ret;
+
+    if(!(ctx = EVP_CIPHER_CTX_new()))
+        handleErrors();
+
+    if(!EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL))
+        handleErrors();
+
+    if(!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, iv.size(), NULL))
+        handleErrors();
+
+    if(!EVP_DecryptInit_ex(ctx, NULL, NULL, key.data(), iv.data()))
+        handleErrors();
+
+    if(!aad.empty()) {
+        if(!EVP_DecryptUpdate(ctx, NULL, &len, aad.data(), aad.size()))
+            handleErrors();
+    }
+
+    plaintext.resize(ciphertext.size());
+    if(!EVP_DecryptUpdate(ctx, plaintext.data(), &len, ciphertext.data(), ciphertext.size()))
+        handleErrors();
+    plaintext_len = len;
+
+    if(!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tag.size(), (void*)tag.data()))
+        handleErrors();
+
+    ret = EVP_DecryptFinal_ex(ctx, plaintext.data() + len, &len);
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    if(ret > 0) {
+        plaintext_len += len;
+        plaintext.resize(plaintext_len);
+        return plaintext_len;
+    } else {
+        return -1; // Decryption failed
+    }
 }
