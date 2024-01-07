@@ -13,7 +13,7 @@ const int SERVER_PORT = 50000;
 const std::string FILE_STORAGE = "./files/";
 
 void processUploadCommand(const std::string& aesKey) {
-    std::string filename = receiveDataAESDecrypted(aesKey);  // Receive filename
+    std::string filename = sanitizeFilename(receiveDataAESDecrypted(aesKey));  // Sanitize and receive filename
     fs::path dirPath(FILE_STORAGE);
 
     // Check if FILE_STORAGE directory exists, if not, create it
@@ -36,7 +36,9 @@ void processUploadCommand(const std::string& aesKey) {
 
 
 
-void processDownloadCommand(const std::string& aesKey, const std::string& requestedFilename, int portNumber) {
+void processDownloadCommand(const std::string& aesKey, std::string& requestedFilename, int portNumber) {
+    requestedFilename = sanitizeFilename(requestedFilename);
+    std::cout << requestedFilename << std::endl;
     fs::path encryptedFilePath = fs::path(FILE_STORAGE) / (requestedFilename + ".enc");
 
     if (fs::exists(encryptedFilePath) && fs::is_regular_file(encryptedFilePath)) {

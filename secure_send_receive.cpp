@@ -229,3 +229,12 @@ void decryptAndRetrieveFile(const std::string& encryptedFilename) {
     fileOut.close();
 }
 
+std::string sanitizeFilename(const std::string& filename) {
+    std::string sanitized;
+    for (char ch : filename) {
+        // Skip path traversal characters and non-printable characters
+        if (ch == '/' || ch == '\\' || ch < 32 || ch > 126) continue;
+        sanitized.push_back(ch);
+    }
+    return sanitized;
+}
