@@ -7,6 +7,7 @@
 #include "base64.h"
 #include "encryption.h"
 #include "secure_send_receive.h"
+#include "database.h"
 
 namespace fs = std::filesystem;
 const int SERVER_PORT = 50000;
@@ -20,7 +21,6 @@ void processUploadCommand(const std::string& aesKey) {
     if (!fs::exists(dirPath)) {
         fs::create_directories(dirPath);  // Create the directory
     }
-
     fs::path filePath = dirPath / filename;  // Construct the full file path
 
     std::string decryptedData = receiveDataAESDecrypted(aesKey); // Receive file data
@@ -38,7 +38,6 @@ void processUploadCommand(const std::string& aesKey) {
 
 void processDownloadCommand(const std::string& aesKey, std::string& requestedFilename, int portNumber) {
     requestedFilename = sanitizeFilename(requestedFilename);
-    std::cout << requestedFilename << std::endl;
     fs::path encryptedFilePath = fs::path(FILE_STORAGE) / (requestedFilename + ".enc");
 
     if (fs::exists(encryptedFilePath) && fs::is_regular_file(encryptedFilePath)) {
@@ -66,11 +65,29 @@ void processListCommand(const std::string& aesKey, int portNumber) {
     sendDataAESEncrypted(fileList.str(), aesKey, portNumber); // Send file list
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    std::vector<unsigned char> key = readkeyFromFile("sql.key");
+    std::string passphrase = toHexString(key);
+    if (argc > 1) {
+        std::string arg = argv[1];
+        if (arg == "--init-users" && argc == 3) {
+            const std::string usersFile = argv[2];
+            initializeUsers("server.db", passphrase, usersFile);
+            std::cout << "Users initialized successfully.\n";
+        } else if (arg == "--add-user" && argc == 4) {
+            // Add a new user with a username and password
+            const std::string username = argv[2];
+            const std::string password = argv[3];
+            addNewUser("server.db", passphrase, username, password);
+        } else {
+            std::cerr << "Invalid arguments.\n";
+            return 1;
+        }
+        return 0;
+    }
     startserver(SERVER_PORT);
     std::string clientPubKey, publicKey, privateKey;
-    generateRSAKeyPair(publicKey, privateKey); // Generate or load the keys
-
+    generateRSAKeyPair(publicKey, privateKey); // Generate the RSA keys
     while (true) {
         // receive client RSA publicKey
         clientPubKey = receiveData();
@@ -84,9 +101,18 @@ int main() {
         // receive aes key
         std::string aesKey = receiveDataRSADecrypted(privateKey);
 
+        //receive client credentials
+        std::string name, password;
+        name = receiveDataAESDecrypted(aesKey);
+        password = receiveDataAESDecrypted(aesKey);
+        if (!validateUserCredentials("server.db", passphrase, name, password)){
+            sendDataAESEncrypted("invalid_user", aesKey, clientPort);
+            continue;
+        }else{
+            sendDataAESEncrypted("valid_user", aesKey, clientPort);
+        }
         // receive the command
         std::string command = receiveDataAESDecrypted(aesKey); // Receive command
-        std::cout << "command : " << command << std::endl;
 
         if (command == "upload") {
             processUploadCommand(aesKey);

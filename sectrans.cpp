@@ -13,6 +13,18 @@ namespace fs = std::filesystem;
 const int SERVER_PORT = 50000;
 const int CLIENT_PORT = 50001;
 
+void promptForNameAndPassword(std::string& name, std::string& password) {
+    std::cout << "Enter your name: ";
+    std::getline(std::cin, name);
+
+    std::cout << "Enter your password: ";
+    std::getline(std::cin, password);
+    if (!validateCredentials(name, password)){
+        std::cerr << "invalid credentials" << std::endl;
+        exit(1);
+    }
+}
+
 
 void uploadFile(const string& aesKey, const string& filename) {
     // Send the 'up' command first
@@ -81,6 +93,18 @@ int main(int argc, char* argv[]) {
     std::string aesKey;
     generateParameter(aesKey, 16);
     sendDataRSAEncrypted(aesKey, serverPubKey, SERVER_PORT);
+
+    // Call the function to prompt for name and password
+    std::string name, password;
+    promptForNameAndPassword(name, password);
+    std::cout << std::endl;
+    sendDataAESEncrypted(name, aesKey, SERVER_PORT);
+    sendDataAESEncrypted(password, aesKey, SERVER_PORT);
+    std::string response = receiveDataAESDecrypted(aesKey);
+    if (response == "invalid_user"){
+        std::cerr << "non existent user in database" << std::endl;
+        exit(1);
+    }
 
     string command = argv[1];
 

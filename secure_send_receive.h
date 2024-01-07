@@ -17,6 +17,8 @@ void sendDataAESEncrypted(const std::string& data, const std::string& key, int p
 std::string receiveDataAESDecrypted(const std::string& key);
 void encryptAndStoreFile(const std::string& filename);
 void decryptAndRetrieveFile(const std::string& encryptedFilename);
+std::vector<unsigned char> readkeyFromFile(const std::string& keyFilename = "aes.key");
 std::string sanitizeFilename(const std::string& filename);
+bool validateCredentials(const std::string& name, const std::string& password);
 
 #endif

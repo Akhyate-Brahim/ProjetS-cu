@@ -35,7 +35,10 @@
 
 #include <algorithm>
 #include <stdexcept>
-
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <vector>
  //
  // Depending on the url parameter in base64_chars, one of
  // two sets of base64 characters needs to be chosen.
@@ -268,4 +271,11 @@ char* stringToMutableCString(const std::string& str) {
     
     // Return the mutable C-style string
     return cstr;
+}
+std::string toHexString(const std::vector<unsigned char>& data) {
+    std::stringstream hexStream;
+    for (auto byte : data) {
+        hexStream << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(byte);
+    }
+    return hexStream.str();
 }

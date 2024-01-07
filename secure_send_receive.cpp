@@ -158,7 +158,7 @@ std::string receiveData() {
 
     return base64_decode(data);
 }
-std::vector<unsigned char> readAESKeyFromFile(const std::string& keyFilename = "aes.key") {
+std::vector<unsigned char> readkeyFromFile(const std::string& keyFilename) {
     std::ifstream keyFile(keyFilename, std::ios::binary);
     if (!keyFile) {
         throw std::runtime_error("Unable to open key file.");
@@ -177,7 +177,7 @@ void encryptAndStoreFile(const std::string& filename) {
 
     // Convert string data and key to vector<unsigned char>
     std::vector<unsigned char> plaintext(fileData.begin(), fileData.end());
-    std::vector<unsigned char> key = readAESKeyFromFile();
+    std::vector<unsigned char> key = readkeyFromFile();
     // Generate IV
     std::string ivVectorString;
     generateParameter(ivVectorString, 12); // Assuming generateParameter is a defined function
@@ -215,7 +215,7 @@ void decryptAndRetrieveFile(const std::string& encryptedFilename) {
     extractIvTagAndCiphertext(combinedData, iv, tag, ciphertext);
 
     // Convert aesKey string to vector
-    std::vector<unsigned char> key = readAESKeyFromFile();
+    std::vector<unsigned char> key = readkeyFromFile();
 
     // Decrypt the data
     std::vector<unsigned char> decryptedData;
@@ -237,4 +237,23 @@ std::string sanitizeFilename(const std::string& filename) {
         sanitized.push_back(ch);
     }
     return sanitized;
+}
+
+bool validateCredentials(const std::string& name, const std::string& password) {
+    // Define whitelists for name and password
+    const std::string nameWhitelist = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const std::string passwordWhitelist = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_!?$&é";
+
+    // Validate name
+    if (name.empty() || name.length() > 30 || name.find_first_not_of(nameWhitelist) != std::string::npos) {
+        std::cerr << "Invalid name. Name must be 1-30 characters long and can only contain allowed characters.\n";
+        return false;
+    }
+
+    // Validate password
+    if (password.length() < 8 || password.length() > 20 || password.find_first_not_of(passwordWhitelist) != std::string::npos) {
+        std::cerr << "Invalid password. Password must be 8-20 characters long and can only contain allowed characters.\n";
+        return false;
+    }
+    return true;
 }
