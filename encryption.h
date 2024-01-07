@@ -12,6 +12,7 @@
 #include <openssl/err.h>
 #include <stdexcept>
 #include <vector>
+#include <fstream>
 #include <openssl/ossl_typ.h>
 #include <sstream>
 
@@ -36,5 +37,6 @@ int gcm_decrypt(const std::vector<unsigned char>& ciphertext,
                 const std::vector<unsigned char>& iv,
                 std::vector<unsigned char>& plaintext);
 void generateParameter(std::string& key, int size);
+std::vector<unsigned char> readStorageKey(const std::string& filepath);
 
 #endif

@@ -15,6 +15,8 @@ void sendDataRSAEncrypted(const std::string& data, const std::string& publicKey,
 std::string receiveDataRSADecrypted(const std::string& privateKey);
 void sendDataAESEncrypted(const std::string& data, const std::string& key, int portNumber);
 std::string receiveDataAESDecrypted(const std::string& key);
+void encryptAndStoreFile(const std::string& filename);
+void decryptAndRetrieveFile(const std::string& encryptedFilename);
 
 
 #endif

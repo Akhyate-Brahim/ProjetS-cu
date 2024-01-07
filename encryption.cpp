@@ -1,6 +1,7 @@
 #include "encryption.h"
+#include <filesystem>
+namespace fs = std::filesystem;
 
- 
 void generateRSAKeyPair(std::string &publicKey, std::string &privateKey, int keyLength) {
     // Generating the key pair
     RSA *keypair = RSA_new();
@@ -120,7 +121,7 @@ int gcm_encrypt(const std::vector<unsigned char>& plaintext,
     if(!(ctx = EVP_CIPHER_CTX_new()))
         handleErrors();
 
-    if(1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL))
+    if(1 != EVP_EncryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL))
         handleErrors();
 
     if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, iv.size(), NULL))
@@ -165,7 +166,7 @@ int gcm_decrypt(const std::vector<unsigned char>& ciphertext,
     if(!(ctx = EVP_CIPHER_CTX_new()))
         handleErrors();
 
-    if(!EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL))
+    if(!EVP_DecryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL))
         handleErrors();
 
     if(!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, iv.size(), NULL))
@@ -198,4 +199,19 @@ int gcm_decrypt(const std::vector<unsigned char>& ciphertext,
     } else {
         return -1; // Decryption failed
     }
+}
+std::vector<unsigned char> readStorageKey(const std::string& filepath) {
+    std::ifstream keyFile(filepath, std::ios::in | std::ios::binary);
+    if (!keyFile.is_open()) {
+        throw std::runtime_error("Unable to open key file: " + filepath);
+    }
+
+    std::vector<unsigned char> key(std::istreambuf_iterator<char>(keyFile), {});
+    keyFile.close();
+
+    if (key.size() != 16) { // Check if the key size is 32 bytes (256 bits)
+        throw std::runtime_error("Key size is incorrect. Expected 32 bytes.");
+    }
+
+    return key;
 }

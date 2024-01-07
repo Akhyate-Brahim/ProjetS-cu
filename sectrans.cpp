@@ -11,7 +11,7 @@
 using namespace std;
 namespace fs = std::filesystem;
 const int SERVER_PORT = 50000;
-const int CLIENT_PORT = 1235;
+const int CLIENT_PORT = 50001;
 
 
 void uploadFile(const string& aesKey, const string& filename) {
@@ -28,6 +28,23 @@ void uploadFile(const string& aesKey, const string& filename) {
     sendDataAESEncrypted(fileData, aesKey,SERVER_PORT);
 }
 
+void downloadFile(const string& aesKey, const string& filename) {
+    // Send the download command first
+    sendDataAESEncrypted("download", aesKey, SERVER_PORT);
+
+    // Send the filename
+    sendDataAESEncrypted(filename, aesKey, SERVER_PORT);
+
+    string fileData = receiveDataAESDecrypted(aesKey);
+    if (fileData == "FILE_NOT_FOUND"){
+        std::cout<< "file does not exist"<<std::endl;
+        throw new runtime_error("FILE_NOT_FOUND");
+    }
+    ofstream fout(filename, ios::binary);
+    fout.write(fileData.c_str(), fileData.size());
+    fout.close();
+}
+
 void listFiles(const string& aesKey) {
     // Send the 'list' command first
     sendDataAESEncrypted("list", aesKey, SERVER_PORT);
@@ -37,19 +54,6 @@ void listFiles(const string& aesKey) {
 
     // Print files on client console
     std::cout << filesList << std::endl;
-}
-
-void downloadFile(const string& aesKey, const string& filename) {
-    // Send the download command first
-    sendDataAESEncrypted("download", aesKey, SERVER_PORT);
-
-    // Send the filename
-    sendDataAESEncrypted(filename, aesKey, SERVER_PORT);
-
-    string fileData = receiveDataAESDecrypted(aesKey);
-    ofstream fout(filename, ios::binary);
-    fout.write(fileData.c_str(), fileData.size());
-    fout.close();
 }
 
 int main(int argc, char* argv[]) {
@@ -75,7 +79,7 @@ int main(int argc, char* argv[]) {
 
     // send aes key
     std::string aesKey;
-    generateParameter(aesKey, 32);
+    generateParameter(aesKey, 16);
     sendDataRSAEncrypted(aesKey, serverPubKey, SERVER_PORT);
 
     string command = argv[1];

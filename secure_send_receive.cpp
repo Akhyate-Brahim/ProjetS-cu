@@ -158,4 +158,74 @@ std::string receiveData() {
 
     return base64_decode(data);
 }
+std::vector<unsigned char> readAESKeyFromFile(const std::string& keyFilename = "aes.key") {
+    std::ifstream keyFile(keyFilename, std::ios::binary);
+    if (!keyFile) {
+        throw std::runtime_error("Unable to open key file.");
+    }
+
+    std::vector<unsigned char> key(std::istreambuf_iterator<char>(keyFile), {});
+    keyFile.close();
+    return key;
+}
+
+void encryptAndStoreFile(const std::string& filename) {
+    // Read file data
+    std::ifstream fileIn(filename, std::ios::binary);
+    std::string fileData((std::istreambuf_iterator<char>(fileIn)), std::istreambuf_iterator<char>());
+    fileIn.close();
+
+    // Convert string data and key to vector<unsigned char>
+    std::vector<unsigned char> plaintext(fileData.begin(), fileData.end());
+    std::vector<unsigned char> key = readAESKeyFromFile();
+    // Generate IV
+    std::string ivVectorString;
+    generateParameter(ivVectorString, 12); // Assuming generateParameter is a defined function
+    std::vector<unsigned char> ivVector(ivVectorString.begin(), ivVectorString.end());
+
+    // Prepare additional parameters for encryption
+    std::vector<unsigned char> aad; // Optional: Additional Authenticated Data
+    std::vector<unsigned char> ciphertext;
+    std::vector<unsigned char> tag(16); // Tag for GCM
+
+    // Encrypt the data
+    gcm_encrypt(plaintext, aad, key, ivVector, ciphertext, tag);
+
+    // Append IV and tag to the ciphertext
+    ciphertext.insert(ciphertext.end(), ivVector.begin(), ivVector.end());
+    ciphertext.insert(ciphertext.end(), tag.begin(), tag.end());
+
+    // Write the encrypted data to a file
+    std::ofstream fileOut(filename + ".enc", std::ios::binary);
+    fileOut.write(reinterpret_cast<const char*>(ciphertext.data()), ciphertext.size());
+    fileOut.close();
+}
+
+void decryptAndRetrieveFile(const std::string& encryptedFilename) {
+    // Read encrypted data from file
+    std::ifstream fileIn(encryptedFilename, std::ios::binary);
+    std::string encryptedData((std::istreambuf_iterator<char>(fileIn)), std::istreambuf_iterator<char>());
+    fileIn.close();
+    
+    // Convert encrypted data to vector<unsigned char>
+    std::vector<unsigned char> combinedData(encryptedData.begin(), encryptedData.end());
+
+    // Extract IV, Tag, and Ciphertext
+    std::vector<unsigned char> iv, tag, ciphertext;
+    extractIvTagAndCiphertext(combinedData, iv, tag, ciphertext);
+
+    // Convert aesKey string to vector
+    std::vector<unsigned char> key = readAESKeyFromFile();
+
+    // Decrypt the data
+    std::vector<unsigned char> decryptedData;
+    std::vector<unsigned char> aad; // AAD is not used in this context, so it's empty
+    gcm_decrypt(ciphertext, aad, tag, key, iv, decryptedData);
+
+    // Write decrypted data back to a file (with original filename)
+    std::string originalFilename = encryptedFilename.substr(0, encryptedFilename.find(".enc"));
+    std::ofstream fileOut(originalFilename, std::ios::binary);
+    fileOut.write(reinterpret_cast<const char*>(decryptedData.data()), decryptedData.size());
+    fileOut.close();
+}
 
