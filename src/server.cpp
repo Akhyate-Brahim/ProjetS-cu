@@ -21,7 +21,7 @@ void processUploadCommand(const std::string& aesKey) {
     if (!fs::exists(dirPath)) {
         fs::create_directories(dirPath);  // Create the directory
     }
-    fs::path filePath = dirPath / filename;  // Construct the full file path
+    fs::path filePath = dirPath / filename;  // Construct the full file 
 
     std::string decryptedData = receiveDataAESDecrypted(aesKey); // Receive file data
     // Write the received data to a temporary file
@@ -53,16 +53,29 @@ void processDownloadCommand(const std::string& aesKey, std::string& requestedFil
         sendDataAESEncrypted(fileData, aesKey, portNumber); // Send file data
         fs::remove(decryptedFilePath); // Remove the temporary decrypted file
     } else {
-        sendDataAESEncrypted("FILE_NOT_FOUND", aesKey, portNumber); // Send error message
+        sndmsg(stringToMutableCString("END_OF_FILE"), portNumber);
     }
 }
 
 void processListCommand(const std::string& aesKey, int portNumber) {
+    fs::path dirPath(FILE_STORAGE);
+
+    // Check if FILE_STORAGE directory exists
+    if (!fs::exists(dirPath) || !fs::is_directory(dirPath)) {
+        sndmsg(stringToMutableCString("END_OF_FILE"), portNumber);
+        return; // Exit the function if the directory does not exist
+    }
+
     std::stringstream fileList;
-    for (const auto &entry : fs::directory_iterator(FILE_STORAGE)) {
+    for (const auto &entry : fs::directory_iterator(dirPath)) {
         fileList << entry.path().filename().string() << "\n";
     }
-    sendDataAESEncrypted(fileList.str(), aesKey, portNumber); // Send file list
+
+    if (fileList.str().empty()) {
+        sndmsg(stringToMutableCString("END_OF_FILE"), portNumber);
+    } else {
+        sendDataAESEncrypted(fileList.str(), aesKey, portNumber); // Send file list
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -85,6 +98,7 @@ int main(int argc, char* argv[]) {
         }
         return 0;
     }
+    
     startserver(SERVER_PORT);
     std::string clientPubKey, publicKey, privateKey;
     generateRSAKeyPair(publicKey, privateKey); // Generate the RSA keys
@@ -111,6 +125,7 @@ int main(int argc, char* argv[]) {
         }else{
             sendDataAESEncrypted("valid_user", aesKey, clientPort);
         }
+        
         // receive the command
         std::string command = receiveDataAESDecrypted(aesKey); // Receive command
 

@@ -105,6 +105,9 @@ std::string receiveDataAESDecrypted(const std::string& aesKey) {
 
         base64EncodedData += bufferStr;
     }
+    if (base64EncodedData.size()==0){
+        return "";
+    }
 
     // Decode from Base64
     std::string decodedData = base64_decode(base64EncodedData);

@@ -29,7 +29,10 @@ void promptForNameAndPassword(std::string& name, std::string& password) {
 void uploadFile(const string& aesKey, const string& filename) {
     // Send the 'up' command first
     sendDataAESEncrypted("upload", aesKey,SERVER_PORT);
-
+    if (!(fs::exists(filename) && fs::is_regular_file(filename))){
+        std::cout <<"file does not exist"<<std::endl;
+        return;
+    }
     // Open the file for reading in binary mode
     ifstream fin(filename, ios::binary);
     string fileData((istreambuf_iterator<char>(fin)), istreambuf_iterator<char>());
@@ -48,7 +51,7 @@ void downloadFile(const string& aesKey, const string& filename) {
     sendDataAESEncrypted(filename, aesKey, SERVER_PORT);
 
     string fileData = receiveDataAESDecrypted(aesKey);
-    if (fileData == "FILE_NOT_FOUND"){
+    if (fileData == ""){
         std::cout<< "file does not exist"<<std::endl;
         throw new runtime_error("FILE_NOT_FOUND");
     }
@@ -94,6 +97,7 @@ int main(int argc, char* argv[]) {
     generateParameter(aesKey, 16);
     sendDataRSAEncrypted(aesKey, serverPubKey, SERVER_PORT);
 
+    
     // Call the function to prompt for name and password
     std::string name, password;
     promptForNameAndPassword(name, password);
@@ -105,7 +109,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "non existent user in database" << std::endl;
         exit(1);
     }
-
+    
     string command = argv[1];
 
     if (command == "-up") {
